@@ -1,5 +1,6 @@
 inherit image_types
 inherit kernel-artifact-names
+inherit deploy
 
 #
 # Create an partitioned trustme image that can be dd'ed to the boot medium
@@ -10,25 +11,16 @@ TEST_CERT_DIR = "${TOPDIR}/test_certificates"
 SECURE_BOOT_SIGNING_KEY = "${TEST_CERT_DIR}/ssig_subca.key"
 SECURE_BOOT_SIGNING_CERT = "${TEST_CERT_DIR}/ssig_subca.cert"
 
-INSTALLER_BOOTPART_DIR="${DEPLOY_DIR_IMAGE}/installer_bootpart"
-INSTALLER_IMAGE_TMP="${DEPLOY_DIR_IMAGE}/tmp_installerimage"
+INSTALLER_TARGET_ALIGN="4096"
+INSTALLER_TARGET_SECTOR_SIZE="4096"
 
-INSTALLER_BOOTPART_DIR="${DEPLOY_DIR_IMAGE}/installer_bootpart"
-INSTALLER_IMAGE_OUT="${DEPLOY_DIR_IMAGE}/trustme_image"
-TRUSTME_IMAGE_OUT="${DEPLOY_DIR_IMAGE}/trustme_image"
+INSTALLER_BOOTPART_DIR="${B}/trustme_installerbootpart"
+INSTALLER_IMAGE_TMP="${B}/tmp_trustmeinstaller"
+INSTALLER_IMAGE_OUT="${B}/trustme_image"
+INSTALLER_IMAGE="${INSTALLER_IMAGE_OUT}/trustmeinstaller.img"
 
-INSTALLER_IMAGE="${INSTALLER_IMAGE_OUT}/trustmeimage.img"
-
-
-do_installer_bootpart[depends] = " \
-    parted-native:do_populate_sysroot \
-    mtools-native:do_populate_sysroot \
-    dosfstools-native:do_populate_sysroot \
-    gptfdisk-native:do_populate_sysroot \
-    sbsigntool-native:do_populate_sysroot \
-	virtual/kernel:do_deploy \
-"
-
+INSTALLER_BOOTPART_EXTRA_FACTOR?="1.2"
+INSTALLER_BOOTPART_FS="fat16"
 
 do_installer_bootpart () {
 
@@ -51,40 +43,15 @@ do_installer_bootpart () {
 
 	machine_replaced=$(echo "${MACHINE}" | tr "_" "-")
 
-	bbnote "Signing kernel binary"
-	kernelbin="${DEPLOY_DIR_IMAGE}/installer-kernel/bzImage-initramfs-${machine_replaced}.bin"
-	if [ -L "${kernelbin}" ]; then
-		link=`readlink "${kernelbin}"`
-		rm -f ${link}.signed ${kernelbin}.signed
-		ln -sf ${link}.signed ${kernelbin}.signed
-	fi
-
-	sbsign --key "${SECURE_BOOT_SIGNING_KEY}" --cert "${SECURE_BOOT_SIGNING_CERT}" --output "${kernelbin}.signed" "${kernelbin}"
+	kernelbin="${DEPLOY_DIR_IMAGE}/installer-kernel/bzImage-initramfs-${machine_replaced}.bin.signed"
 
 	bbnote "Copying boot partition files to ${INSTALLER_BOOTPART_DIR}"
 
 	bbdebug 1 "Boot machine: $machine"
 
 	install -d "${INSTALLER_BOOTPART_DIR}/EFI/BOOT/"
-	cp --dereference "${DEPLOY_DIR_IMAGE}/installer-kernel/bzImage-initramfs-${machine_replaced}.bin.signed" "${INSTALLER_BOOTPART_DIR}/EFI/BOOT/BOOTX64.EFI"
+	cp --dereference "${kernelbin}" "${INSTALLER_BOOTPART_DIR}/EFI/BOOT/BOOTX64.EFI"
 }
-
-INSTALLER_BOOTPART_DIR="${DEPLOY_DIR_IMAGE}/trustme_installerbootpart"
-INSTALLER_IMAGE_TMP="${DEPLOY_DIR_IMAGE}/tmp_trustmeinstaller"
-INSTALLER_TARGET_ALIGN="4096"
-INSTALLER_TARGET_SECTOR_SIZE="4096"
-TRUSTME_BOOTPART_DIR="${DEPLOY_DIR_IMAGE}/trustme_installerbootpart"
-TRUSTME_INSTALLER_TMP="${DEPLOY_DIR_IMAGE}/tmp_trustmeinstaller"
-
-INSTALLER_BOOTPART_DIR="${DEPLOY_DIR_IMAGE}/trustme_installerbootpart"
-INSTALLER_IMAGE_OUT="${DEPLOY_DIR_IMAGE}/trustme_image"
-
-INSTALLER_IMAGE="${INSTALLER_IMAGE_OUT}/trustmeinstaller.img"
-INSTALLER_BOOTPART_EXTRA_FACTOR="1.2"
-INSTALLER_BOOTPART_FS="fat16"
-
-
-addtask do_installer_bootpart before do_image_trustmeinstaller
 
 do_image_trustmeinstaller[depends] = " \
     parted-native:do_populate_sysroot \
@@ -94,10 +61,11 @@ do_image_trustmeinstaller[depends] = " \
     virtual/kernel:do_deploy \
 "
 
-IMAGE_CMD:trustmeinstaller[deptask] += " do_installer_bootpart "
-
+DEPENDS += "e2fsprogs-native bc-native"
 
 IMAGE_CMD:trustmeinstaller () {
+
+	do_installer_bootpart
 
 	if [ -z "${INSTALLER_BOOTPART_DIR}" ];then
 		bbfatal_log "Cannot get bitbake variable \"INSTALLER_BOOTPART_DIR\""
@@ -157,33 +125,33 @@ IMAGE_CMD:trustmeinstaller () {
 
 	rm -f "${INSTALLER_IMAGE}"
 
-	if [ -z "${TRUSTME_INSTALLER_TMP}" ];then
-		bbfatal_log "Cannot get bitbake variable \"TRUSTME_INSTALLER_TMP\""
+	if [ -z "${INSTALLER_IMAGE_TMP}" ];then
+		bbfatal_log "Cannot get bitbake variable \"INSTALLER_IMAGE_TMP\""
 		exit 1
 	fi
 
-	cmldata="${DEPLOY_DIR_IMAGE}/tmp_trustmeimage/tmp_data"
+	cmldata="${DEPLOY_DIR_IMAGE}/trustme_image/trustme_datapartition"
 
-	rm -fr ${TRUSTME_INSTALLER_TMP}
+	rm -fr ${INSTALLER_IMAGE_TMP}
 
 	machine_replaced=$(echo "${MACHINE}" | tr "_" "-")
 
 	bbnote "Starting to create trustme image"
 
 	# create temporary directories
-	install -d "${TRUSTME_IMAGE_OUT}"
-	install -d "${TRUSTME_BOOTPART_DIR}"
-	tmp_modules="${TRUSTME_INSTALLER_TMP}/tmp_modules"
-	tmp_firmware="${TRUSTME_INSTALLER_TMP}/tmp_firmware"
-	tmp_datapart="${TRUSTME_INSTALLER_TMP}/tmp_data"
+	install -d "${INSTALLER_IMAGE_OUT}"
+	install -d "${INSTALLER_BOOTPART_DIR}"
+	tmp_modules="${INSTALLER_IMAGE_TMP}/tmp_modules"
+	tmp_firmware="${INSTALLER_IMAGE_TMP}/tmp_firmware"
+	tmp_datapart="${INSTALLER_IMAGE_TMP}/tmp_data"
 	rootfs_datadir="${tmp_datapart}/userdata/"
 	tmpdir="${TOPDIR}/tmp_container"
-	trustme_fsdir="${TRUSTME_INSTALLER_TMP}/filesystems"
+	trustme_fsdir="${INSTALLER_IMAGE_TMP}/filesystems"
 	trustme_bootfs="$trustme_fsdir/trustme_bootfs"
 	trustme_datafs="$trustme_fsdir/trustme_datafs"
 
-	rm -fr "${TRUSTME_INSTALLER_TMP}"
-	install -d "${TRUSTME_INSTALLER_TMP}"
+	rm -fr "${INSTALLER_IMAGE_TMP}"
+	install -d "${INSTALLER_IMAGE_TMP}"
 	rm -fr "${rootfs_datadir}"
 	install -d "${rootfs_datadir}"
 	rm -fr "${trustme_fsdir}"
@@ -219,7 +187,7 @@ IMAGE_CMD:trustmeinstaller () {
 	install -d "${rootfs_datadir}/trustme_boot/EFI/BOOT/"
 
 	cp -r "$cmldata" "${rootfs_datadir}/trustme_data"
-	cp -r --dereference "${DEPLOY_DIR_IMAGE}/cml-kernel/bzImage-initramfs-${machine_replaced}.bin.signed" "${rootfs_datadir}/trustme_boot/EFI/BOOT/BOOTX64.EFI"
+	cp -r --dereference "${DEPLOY_DIR_IMAGE}/installer-kernel/bzImage-initramfs-${machine_replaced}.bin.signed" "${rootfs_datadir}/trustme_boot/EFI/BOOT/BOOTX64.EFI"
 	cp "${TOPDIR}/../trustme/build/yocto/install_trustme.sh" "${rootfs_datadir}/"
 
 
@@ -377,3 +345,9 @@ IMAGE_CMD:trustmeinstaller () {
 
 	bbnote "Successfully created trustme image at ${INSTALLER_IMAGE}"
 }
+
+do_deploy () {
+	install -d "${DEPLOYDIR}"
+	cp -r "${INSTALLER_IMAGE_OUT}" "${DEPLOYDIR}"
+}
+addtask do_deploy after do_image_complete
