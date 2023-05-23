@@ -19,7 +19,7 @@ do_sign_guestos:prepend () {
 	mkdir -p "${UPDATE_OUT}"
 	cp "${DEPLOY_DIR_IMAGE}/cml-kernel/bzImage-initramfs-${MACHINE}.bin.signed" "${UPDATE_OUT}/kernel.img"
 	cp "${DEPLOY_DIR_IMAGE}/trustx-cml-firmware-${MACHINE}.squashfs" "${UPDATE_OUT}/firmware.img"
-	cp "${DEPLOY_DIR_IMAGE}/cml-kernel/modules-${MODULE_TARBALL_LINK_NAME}.squashfs" "${UPDATE_OUT}/modules.img"
+	cp "${DEPLOY_DIR_IMAGE}/trustx-cml-modules-${MACHINE}.squashfs" "${UPDATE_OUT}/modules.img"
 }
 
 do_sign_guestos:append () {
