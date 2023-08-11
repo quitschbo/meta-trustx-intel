@@ -5,7 +5,7 @@ SRC_URI[sha256sum] = "f4ece634a498bde73dc23d1aab1171a07b64718bd47f167240a7db4049
 
 inherit perlnative native
 
-DEPENDS = "gnu-efi-native help2man-native sbsigntool-native libfile-slurp-perl-native"
+DEPENDS = "gnu-efi-native help2man-native sbsigntool-native libfile-slurp-perl-native openssl-native"
 
 EFIFILES = "\
 	LockDown.efi \
