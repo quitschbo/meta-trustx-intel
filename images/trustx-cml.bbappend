@@ -20,6 +20,7 @@ do_sign_guestos:prepend () {
 	cp "${DEPLOY_DIR_IMAGE}/cml-kernel/bzImage-initramfs-${MACHINE}.bin.signed" "${UPDATE_OUT}/kernel.img"
 	cp "${DEPLOY_DIR_IMAGE}/trustx-cml-firmware-${MACHINE}.squashfs" "${UPDATE_OUT}/firmware.img"
 	cp "${DEPLOY_DIR_IMAGE}/trustx-cml-modules-${MACHINE}.squashfs" "${UPDATE_OUT}/modules.img"
+	cp "${WORKDIR}/device.conf" "${UPDATE_OUT}/device.img"
 }
 
 do_sign_guestos:append () {
